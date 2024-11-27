@@ -1,6 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {IERC721Receiver} from "@openzeppelin/contracts/interfaces/IERC721Receiver.sol";
 import "./Database.sol";
 import {Auction} from "./Auction.sol";
 import {USDT} from "./USDT.sol";
@@ -177,11 +178,13 @@ contract Lobby {
     }
 
     function buyUSDT() payable public {
-        address(currency).call{value:msg.value}(abi.encodeWithSelector(0xd0e30db0, ""));
+        (bool success, ) = address(currency).call{value:msg.value}(abi.encodeWithSelector(0xd0e30db0, ""));
+        require(success,"Purchase unsuccessful");
     }
 
     function sellUSDT() payable public {
-        address(currency).call{value:msg.value}(abi.encodeWithSelector(0x3ccfd60b, ""));
+        (bool success, ) = address(currency).call{value:msg.value}(abi.encodeWithSelector(0x3ccfd60b, ""));
+        require(success,"Sell unsuccessful");
     }
 
     
