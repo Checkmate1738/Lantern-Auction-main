@@ -1,11 +1,12 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {IERC721Receiver} from "@openzeppelin/contracts/interfaces/IERC721Receiver.sol";
 import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import { IERC721 } from "@openzeppelin/contracts/interfaces/IERC721.sol";
 import "./Database.sol";
 
-contract Auction {
+contract Auction is IERC721Receiver{
 
     uint256 private immutable startTime;
     uint256 private immutable stopTime;
@@ -120,6 +121,15 @@ contract Auction {
 /*
         END OF MODIFIERS
 */
+
+function onERC721Received(
+    address operator,
+    address from,
+    uint256 tokenId,
+    bytes calldata data
+) external pure override returns (bytes4) {
+    return this.onERC721Received.selector; // Return correct magic value
+}
 
     function register(
         address _buyer,

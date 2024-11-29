@@ -7,7 +7,7 @@ import {Auction} from "./Auction.sol";
 import {USDT} from "./USDT.sol";
 import {NFT} from "./NFT.sol";
 
-contract Lobby {
+contract Lobby is IERC721Receiver {
     
     address internal immutable PRESIDENT;
     address[] internal manager;
@@ -18,7 +18,7 @@ contract Lobby {
     // Auctions Per Seller (APS)
     mapping(address => Auctions[]) internal APS;
     mapping(address => bool) internal sellers;
-    mapping(address manager => bool ) internal managers;
+    mapping(address manager => ManagerID managerId ) internal managers;
     mapping(bytes3 auctionSig => Auction auction_) internal auctions;
     mapping(address NFT_Owner => mapping(address NFT_Address => NFT _NFT_ )) internal NFTs;
 
@@ -38,8 +38,17 @@ contract Lobby {
     }
 
     modifier onlyManager() {
-        require(managers[msg.sender], "Not a manager");
+        require(managers[msg.sender].isManager, "Not a manager");
         _;
+    }
+
+    function onERC721Received(
+        address operator,
+        address from,
+        uint256 tokenId,
+        bytes calldata data
+    ) external pure override returns (bytes4) {
+        return this.onERC721Received.selector; // Return correct magic value
     }
 
     function newAuction(
@@ -139,11 +148,26 @@ contract Lobby {
 */
 
     function AddManager(address _address) public onlyPRESIDENT {
-        managers[_address] = true;
+        ManagerID memory managerId = ManagerID({
+            manager : _address,
+            id : manager.length,
+            isManager : true
+        });
+
+        manager.push(_address);
+
+        managers[_address] = managerId;
     }
 
     function RemoveManager(address _address) public onlyPRESIDENT {
-        managers[_address] = false;
+        uint256 _manager = managers[_address].id;
+        uint256 _lastManager = manager.length - 1;
+
+        (manager[_manager],manager[_lastManager]) = (manager[_lastManager], manager[_manager]);
+
+        manager.pop();
+
+        delete managers[_address];
     }
 
 /*
@@ -154,16 +178,16 @@ contract Lobby {
         NFT Department
 */
 
-    function createNFT(string memory name, string memory symbol,uint256 size) public returns(nft memory){
+    function createNFT(address to, string memory name, string memory symbol,uint256 size) public returns(nft memory){
         require(size <= 10, "Maximum amount of tokens reached");
         NFT _NFT_ = new NFT(name,symbol);
-        NFTs[msg.sender][address(_NFT_)] = _NFT_;
+        NFTs[to][address(_NFT_)] = _NFT_;
         for (uint i = 0; i < size ; ++i) {
             _NFT_.mint();
         }
         nft memory __NFT = nft({
             nftAddress : address(_NFT_),
-            owner : msg.sender
+            owner : to
         });
         availableNFTs.push(__NFT);
         return __NFT;

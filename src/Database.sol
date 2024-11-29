@@ -88,6 +88,12 @@ struct Seller {
     Asset asset_;
 }
 
+struct ManagerID{
+    address manager;
+    uint256 id;
+    bool isManager;
+}
+
 function _setDuration_(Duration _duration) pure returns(uint256){
         
     if (_duration == Duration.Day){

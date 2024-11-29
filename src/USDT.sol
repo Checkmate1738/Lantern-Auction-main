@@ -10,6 +10,9 @@ contract USDT is ERC20, Ownable {
     uint256 constant internal profit = 1000000;
     uint256 private accumulatedProfit;
 
+    event Deposit(address indexed to, uint256 amount);
+    event Withdraw(address indexed to, uint256 amount);
+
     constructor () ERC20("US Dollar Tether","USDT") Ownable(msg.sender) {}
 
     function deposit() payable public {
@@ -19,6 +22,7 @@ contract USDT is ERC20, Ownable {
         accumulatedFee += (1 gwei - profit);
         accumulatedProfit += profit;
         _mint(msg.sender, value);
+        emit Deposit(msg.sender, amount);
     }
 
     function withdraw() payable public {
@@ -28,6 +32,7 @@ contract USDT is ERC20, Ownable {
         _burn(msg.sender, balanceOf(msg.sender));
         (bool success, ) = msg.sender.call{value:amount}("");
         require(success,"Transfer unsuccessful");
+        emit Withdraw(msg.sender, amount);
     }
 
     function WithdrawFee() payable public onlyOwner {
@@ -35,6 +40,7 @@ contract USDT is ERC20, Ownable {
         accumulatedProfit = 0;
         (bool success, ) = msg.sender.call{value:amount}("");
         require(success,"Transfer unsuccessful");
+        emit Withdraw(msg.sender, amount);
     }
 
 }
