@@ -3,11 +3,15 @@ pragma solidity ^0.8.0;
 
 import {Test,console} from "forge-std/Test.sol";
 import {Lobby} from "../src/Lobby.sol";
-import {Duration,nft} from "../src/Database.sol";
+import {NFT} from "../src/NFT.sol";
+import {USDT} from "../src/USDT.sol";
+import {Auction} from "../src/Auction.sol";
+import {Duration,nft,Asset,AuctionStatus} from "../src/Database.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 contract TestLobby is Test {
     Lobby internal lobby;
+    USDT internal currency;
 
     function setUp() public {
         vm.startPrank(address(2));
@@ -16,47 +20,83 @@ contract TestLobby is Test {
             uint256 j = i + 100;
             lobby.AddManager(vm.addr(j));
         }
+        currency = new USDT();
         vm.stopPrank();
     }
 
     function test_newAuction() public {
-        deal(address(1),100 ether);
 
-        vm.startPrank(address(1));
-        
-        (bool ok, ) = address(lobby).call{value: 10 ether}(abi.encodeWithSelector(0x5b365040, ""));
+        address sender = vm.addr(3);
+        address bidder = vm.addr(6);
+
+        deal(sender,100 ether);
+
+        vm.startPrank(sender);
+
+        bytes4 functionSig = bytes4(abi.encode(keccak256("deposit()")));
+        uint256 amount = 10 ether;
+        (bool ok, ) = address(currency).call{value: amount}(abi.encodeWithSelector(functionSig, ""));
         require(ok,"USDT purchase unsuccessful");
         bytes10 accessKey = bytes10(lobby.generateKey(1e16, 1738));
-        nft memory _NFT = lobby.createNFT(msg.sender,"Dodge", "DGE", 8);
 
-        //vm.assertEq(IERC721(_NFT.nftAddress).ownerOf(3),address(lobby), "Not the intended owner");
-/*
-        address seller,
-        string memory auctionName,
-        address tokenAddress,
-        uint256 tokenId,
-        uint256 initAmount,
-        bytes10 accessKey,
-        Duration _startTime_,
-        Duration _stopTime_,
-        uint8 _manager
-*/
+        NFT _NFT = new NFT("Dodge", "DGE");
 
-        address auction = lobby.newAuction(
-            address(lobby),
-            "Dodge NFT",
-            _NFT.nftAddress,
+        for (uint i; i < 3;++i) {
+            _NFT.mint();
+        }
+
+        console.log(msg.sender);
+
+        Auction auction = new Auction(
+            address(currency),
+            address(_NFT),
             1,
             2 ether,
-            accessKey,
-            Duration.Day,
-            Duration.Week,
-            2
+            2 days,
+            1 weeks,
+            accessKey
         );
-        
-        vm.assertEq(msg.sender, auction, "The address are not equal");
-        
+
+        _NFT.transferFrom(sender, address(auction), 1);
+
+        currency.approve(address(auction), 2 ether);
+
+        auction.MinAmt();
+
+        console.log("sender",currency.balanceOf(sender)); 
+
         vm.stopPrank();
+
+        console.log(auction.Status());
+
+        vm.warp(3 days);
+
+        console.log(auction.Status());
+
+        deal(bidder, 100 ether);
+
+        vm.startPrank(bidder);
+        (bool okay, ) = address(currency).call{value:15 ether}(abi.encodeWithSelector(bytes4(abi.encode(keccak256("deposit()"))),""));
+        require(okay,"Unsuccessful");
+
+        console.log("bidder",currency.balanceOf(bidder));
+
+        currency.approve(address(auction), 10 ether);
+
+        auction.register(10 ether, bytes10(abi.encode(keccak256("no soul"))));
+        auction.placeBid(4 ether);
+
+        vm.stopPrank();
+
+        vm.warp(3 weeks);
+
+        vm.prank(sender);
+        auction.sendNFT();
+
+        Asset memory asset = auction.assetInAuction();
+
+        console.log("sender",currency.balanceOf(sender)); 
+        console.log("bidder",currency.balanceOf(bidder)); 
         
     }
 }

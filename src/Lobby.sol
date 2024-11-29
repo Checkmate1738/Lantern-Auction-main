@@ -52,22 +52,18 @@ contract Lobby is IERC721Receiver {
     }
 
     function newAuction(
-        address seller,
         string memory auctionName,
         address tokenAddress,
         uint256 tokenId,
         uint256 initAmount,
         bytes10 accessKey,
         Duration _startTime_,
-        Duration _stopTime_,
-        uint8 _manager
+        Duration _stopTime_
     ) payable public returns(address) {
         uint256 startTime = _setDuration_(_startTime_);
         uint256 stopTime = _setDuration_(_stopTime_);
 
         Auction auction = new Auction(
-            seller,
-            manager[_manager],
             address(currency),
             tokenAddress,
             tokenId,
@@ -98,7 +94,7 @@ contract Lobby is IERC721Receiver {
         );
 
         auctions[auctionSig] = auction;
-        return seller;
+        return msg.sender;
     }
 
     function myAuctions() public onlySellers view returns (Auctions[] memory){
@@ -111,7 +107,7 @@ contract Lobby is IERC721Receiver {
 
     function Registration(bytes3 _auctionSig_, uint256 amount, bytes10 accessKey) public {
         Auction auction = auctions[_auctionSig_];
-        auction.register(msg.sender, amount, accessKey);
+        auction.register(amount, accessKey);
     }
 
     function place_Bid(bytes3 _auctionSig_, uint256 amount) public {
@@ -132,11 +128,6 @@ contract Lobby is IERC721Receiver {
     function SendAsset(bytes3 _auctionSig_) onlySellers public{
         Auction auction = auctions[_auctionSig_];
         auction.sendNFT();
-    }
-
-    function ExecutiveSend(bytes3 _auctionSig_) onlyManager public {
-        Auction auction = auctions[_auctionSig_];
-        auction.execSend();
     }
 
 /*
@@ -174,42 +165,9 @@ contract Lobby is IERC721Receiver {
         End of Administrative management
 */
 
-/*
-        NFT Department
-*/
-
-    function createNFT(address to, string memory name, string memory symbol,uint256 size) public returns(nft memory){
-        require(size <= 10, "Maximum amount of tokens reached");
-        NFT _NFT_ = new NFT(name,symbol);
-        NFTs[to][address(_NFT_)] = _NFT_;
-        for (uint i = 0; i < size ; ++i) {
-            _NFT_.mint();
-        }
-        nft memory __NFT = nft({
-            nftAddress : address(_NFT_),
-            owner : to
-        });
-        availableNFTs.push(__NFT);
-        return __NFT;
-    }
-
-/*
-        End of NFT Department
-*/
 
     function generateKey(uint256 _hash, uint256 salt) pure public returns(bytes32){
         return bytes10(keccak256(abi.encode(_hash + salt)));
     }
-
-    function buyUSDT() payable public {
-        (bool success, ) = address(currency).call{value:msg.value}(abi.encodeWithSelector(0xd0e30db0, ""));
-        require(success,"Purchase unsuccessful");
-    }
-
-    function sellUSDT() payable public {
-        (bool success, ) = address(currency).call{value:msg.value}(abi.encodeWithSelector(0x3ccfd60b, ""));
-        require(success,"Sell unsuccessful");
-    }
-
     
 }

@@ -10,7 +10,8 @@ enum IsRegistered {
 
 enum AuctionStatus {
     isOpen,
-    isClosed
+    isClosed,
+    pending
 }
 
 enum Escrow {

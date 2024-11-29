@@ -22,7 +22,7 @@ contract USDT is ERC20, Ownable {
         accumulatedFee += (1 gwei - profit);
         accumulatedProfit += profit;
         _mint(msg.sender, value);
-        emit Deposit(msg.sender, amount);
+        emit Deposit(msg.sender, value);
     }
 
     function withdraw() payable public {

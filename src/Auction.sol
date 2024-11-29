@@ -11,14 +11,13 @@ contract Auction is IERC721Receiver{
     uint256 private immutable startTime;
     uint256 private immutable stopTime;
     address internal immutable currency;
-    address internal immutable manager;
 
     uint8 constant maxBidders = type(uint8).max;
     uint8 internal _totalBidders_;
     uint8 internal _totalBids_;
 
     Seller private seller;
-    Asset private asset;
+    Asset public asset;
     uint256 internal finalAmount;
     Bid private _highestBidder_;
     AuctionStatus private status;
@@ -29,8 +28,6 @@ contract Auction is IERC721Receiver{
     mapping(address => Bid[]) private bids;
 
     constructor (
-        address _seller,
-        address _manager,
         address _currency,
         address _tokenAddress,
         uint256 _tokenId,
@@ -39,9 +36,10 @@ contract Auction is IERC721Receiver{
         uint256 _stopTime,
         bytes10 _accessKey
     ) {
-        require(_seller != address(0), "AUCTION ERROR : Invalid EOA address" );
-        require(IERC20(_currency).balanceOf(_seller) >= ( _initAmount + 1 ether ), "AUCTION ERROR : Insufficient funds for auction");
-        require(IERC721(_tokenAddress).ownerOf(_tokenId) == _seller, "AUCTION ERROR : Not an owner in the NFT" );
+        require(msg.sender != address(0), "AUCTION ERROR : Invalid EOA address" );
+        require(IERC20(_currency).balanceOf(msg.sender) >= ( _initAmount + 1 ether ), "AUCTION ERROR : Insufficient funds for auction");
+        require(IERC721(_tokenAddress).ownerOf(_tokenId) == msg.sender, "AUCTION ERROR : Not an owner in the NFT" );
+        require(block.timestamp < _startTime,"AUCTION ERROR : Can't start an auction immediately after launch");
         require(_stopTime > _startTime, "AUCTION ERROR : Auction time can't be the same.");
 
         asset = Asset({
@@ -51,30 +49,25 @@ contract Auction is IERC721Receiver{
             currentAmount_ : _initAmount
         });
 
-        safe[_seller] = Vault({
+        safe[msg.sender] = Vault({
             amount_ : _initAmount,
             accessKey_ : _accessKey
         });
 
         seller = Seller({
-            seller_ : _seller,
+            seller_ : msg.sender,
             deposit_ : DepositStatus.hasDeposited,
             withdraw_ : WithdrawStatus.noWithdraw,
             safe_ : Escrow.hasVault,
             asset_ : asset
         });
 
-        manager = _manager;
         currency = _currency;
         startTime = block.timestamp + _startTime;
         stopTime = startTime + _stopTime;
-        
-        IERC721(_tokenAddress).approve(msg.sender, _tokenId);
-        IERC20(_currency).approve(msg.sender,_initAmount);
+        status = AuctionStatus.pending;
 
-        IERC721(_tokenAddress).safeTransferFrom(msg.sender, address(this), _tokenId);
-        require(IERC20(_currency).transferFrom(msg.sender, address(this), _initAmount),"AUCTION ERROR : No deposit was done");
-        emit AuctionLaunched(address(this), startTime, stopTime);
+        emit AuctionLaunched(address(this), _startTime, block.timestamp + _stopTime);
     }
 
 /* 
@@ -82,12 +75,20 @@ contract Auction is IERC721Receiver{
 */
 
     modifier afterAuction() {
-        require(status == AuctionStatus.isClosed, "AUCTION ERROR : Auctioned is still open");
+        _update();
+        require(status == AuctionStatus.isClosed, "AUCTION ERROR : Auction is still open");
         _;
     }
 
     modifier onGoingAuction() {
-        require(status == AuctionStatus.isOpen, "AUCTION ERROR : Auctioned is closed" );
+        _update();
+        require(status == AuctionStatus.isOpen, "AUCTION ERROR : Auction is closed" );
+        _;
+    }
+
+    modifier beforeAuction() {
+        _update();
+        require(status == AuctionStatus.pending, "AUCTION ERROR : Auction is open" );
         _;
     }
 
@@ -113,38 +114,37 @@ contract Auction is IERC721Receiver{
         _;
     }
 
-    modifier onlyManager() {
-        require(msg.sender == manager);
-        _;
-    }
-
 /*
         END OF MODIFIERS
 */
 
-function onERC721Received(
-    address operator,
-    address from,
-    uint256 tokenId,
-    bytes calldata data
-) external pure override returns (bytes4) {
-    return this.onERC721Received.selector; // Return correct magic value
-}
+    function onERC721Received(
+        address operator,
+        address from,
+        uint256 tokenId,
+        bytes calldata data
+    ) external pure override returns (bytes4) {
+        return this.onERC721Received.selector; // Return correct magic value
+    }
+
+    function MinAmt() public onlySeller beforeAuction {
+        uint256 amount = safe[msg.sender].amount_;
+        require(IERC20(currency).transferFrom(msg.sender, address(this), amount),"AUCTION ERROR : No deposit was done");
+    }
 
     function register(
-        address _buyer,
         uint256 _minDeposit,
         bytes10 _accessKey
     ) public notRegistered(msg.sender) {
         require(_minDeposit > 10 , "AUCTION ERROR : To be registered, you have to put more than $10");
-        
+
         safe[msg.sender] = Vault({
             amount_ : _minDeposit,
             accessKey_ : _accessKey
         });
         
         bidder[msg.sender] = Bidder({
-            buyer_ : _buyer,
+            buyer_ : msg.sender,
             deposit_ : DepositStatus.hasDeposited,
             withdraw_ : WithdrawStatus.hasWithdrawn,
             safe_ : Escrow.hasVault,
@@ -153,6 +153,8 @@ function onERC721Received(
 
         _totalBidders_ ++;
         
+        require(IERC20(currency).transferFrom(msg.sender,address(this), _minDeposit),"AUCTION ERROR : Insufficient allowance");
+
         emit NewBidder(msg.sender);
     }
 
@@ -193,7 +195,7 @@ function onERC721Received(
         bidder[msg.sender].deposit_ = DepositStatus.hasDeposited;
         bidder[msg.sender].safe_ = Escrow.hasVault;
         
-        require(IERC20(currency).transfer(address(this), _amount),"AUCTION ERROR : Transfer completed unsuccessfully");
+        require(IERC20(currency).transferFrom(msg.sender,address(this), _amount),"AUCTION ERROR : Insufficient allowance");
     }
 
     function withdraw(bytes10 _accessKey) afterAuction onlyBidders(msg.sender) public {
@@ -206,46 +208,67 @@ function onERC721Received(
         bidder[msg.sender].deposit_ = DepositStatus.noDeposit;
         bidder[msg.sender].safe_ = Escrow.noVault;
         
-        require(IERC20(currency).transferFrom(address(this),msg.sender,amount), "AUCTION ERROR : Transfer completed unsuccessfully");
+        require(IERC20(currency).transfer(msg.sender,amount), "AUCTION ERROR : Transfer completed unsuccessfully");
     }
 
     function sendNFT() afterAuction onlySeller public {
-        require(IERC20(currency).transferFrom(_highestBidder_.buyer_, seller.seller_, _highestBidder_.amount_),"AUCTION ERROR : Transfer completed Unsuccessfully");
+        require(IERC20(currency).transfer(seller.seller_, _highestBidder_.amount_),"AUCTION ERROR : Transfer completed Unsuccessfully");
         IERC721(asset.nftAddress_).safeTransferFrom(address(this), _highestBidder_.buyer_, asset.id_);
         emit NFT_Transfered(asset.nftAddress_,_highestBidder_.buyer_,_highestBidder_.amount_,asset.id_);
         delete asset;
     }
 
-    function totalBids() public view returns(uint8) {
+    function _update() internal {
+        if (block.timestamp < startTime) {
+            status = AuctionStatus.pending;
+        }
+        else if (block.timestamp >= startTime && block.timestamp < stopTime) {
+            status = AuctionStatus.isOpen;
+        }
+        else if (block.timestamp >= stopTime) {
+            status = AuctionStatus.isClosed;
+        }
+    }
+
+    function assetInAuction() public returns(Asset memory) {
+        return asset;
+    }
+
+    function totalBids() public returns(uint8) {
         return _totalBids_;
     }
 
-    function totalBidders() public view returns(uint8) {
+    function totalBidders() public returns(uint8) {
         return _totalBidders_;
     }
 
-    function myAccount() onGoingAuction registered(msg.sender) public view returns(Bidder memory) {
+    function myAccount() onGoingAuction registered(msg.sender) public  returns(Bidder memory) {
         return bidder[msg.sender];
     }
 
-    function myBids() public view onGoingAuction onlyBidders(msg.sender) returns(Bid[] memory) {
+    function myBids() public onGoingAuction onlyBidders(msg.sender) returns(Bid[] memory) {
         return bids[msg.sender];
     }
 
-    function final_amount() afterAuction view public returns(uint256){
+    function final_amount() afterAuction public returns(uint256){
         return finalAmount;
+    }
+
+    function Status() public returns(string memory _status) {
+        _update();
+        if (status == AuctionStatus.pending) {
+            _status = "pending";
+        }
+        if (status == AuctionStatus.isOpen) {
+            _status = "Open";
+        }
+        if (status == AuctionStatus.isClosed) {
+            _status = "closed";
+        }
     }
 
     function highestBidder() public view returns(address) {
         return _highestBidder_.buyer_;
-    }
-
-    function execSend() afterAuction public onlyManager {
-        require(IERC20(currency).transferFrom(_highestBidder_.buyer_, msg.sender, _highestBidder_.amount_),"AUCTION ERROR : Transfer completed Unsuccessfully");
-        IERC721(asset.nftAddress_).safeTransferFrom(address(this), _highestBidder_.buyer_, asset.id_);
-        emit NFT_Transfered(asset.nftAddress_,_highestBidder_.buyer_,_highestBidder_.amount_,asset.id_);
-        finalAmount = _highestBidder_.amount_;
-        delete asset;
     }
 
     receive() external payable {
