@@ -28,6 +28,7 @@ contract TestLobby is Test {
 
         address sender = vm.addr(3);
         address bidder = vm.addr(6);
+        address bidder1 = vm.addr(7);
 
         deal(sender,100 ether);
 
@@ -73,7 +74,12 @@ contract TestLobby is Test {
 
         console.log(auction.Status());
 
+/*
+logic of code
+*/
+
         deal(bidder, 100 ether);
+        deal(bidder1, 100 ether);
 
         vm.startPrank(bidder);
         (bool okay, ) = address(currency).call{value:15 ether}(abi.encodeWithSelector(bytes4(abi.encode(keccak256("deposit()"))),""));
@@ -83,12 +89,33 @@ contract TestLobby is Test {
 
         currency.approve(address(auction), 10 ether);
 
-        auction.register(10 ether, bytes10(abi.encode(keccak256("no soul"))));
+        auction.register(7 ether, bytes10(abi.encode(keccak256("no soul"))));
         auction.placeBid(4 ether);
 
         vm.stopPrank();
 
+        vm.startPrank(bidder1);
+        (bool okay1, ) = address(currency).call{value:15 ether}(abi.encodeWithSelector(bytes4(abi.encode(keccak256("deposit()"))),""));
+        require(okay1,"Unsuccessful");
+
+        console.log("bidder",currency.balanceOf(bidder1));
+
+        currency.approve(address(auction), 10 ether);
+
+        auction.register(5 ether, bytes10(abi.encode(keccak256("soul"))));
+        auction.placeBid(5 ether);
+
+        vm.stopPrank();
+
+        vm.prank(bidder);
+        auction.placeBid(6 ether);
+
+        console.log(currency.balanceOf(bidder));
+
         vm.warp(3 weeks);
+
+        vm.prank(bidder1);
+        auction.withdraw(bytes10(abi.encode(keccak256("soul"))));
 
         vm.prank(sender);
         auction.sendNFT();
@@ -97,6 +124,14 @@ contract TestLobby is Test {
 
         console.log("sender",currency.balanceOf(sender)); 
         console.log("bidder",currency.balanceOf(bidder)); 
+
+/*
+end of logic code
+*/
+        vm.warp(3 days);
+
+        vm.prank(bidder1);
+        auction.myAccount();
         
     }
 }

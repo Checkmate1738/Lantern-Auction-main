@@ -12,13 +12,13 @@ contract Auction is IERC721Receiver{
     uint256 private immutable stopTime;
     address internal immutable currency;
 
+    uint256 internal finalAmount;
     uint8 constant maxBidders = type(uint8).max;
     uint8 internal _totalBidders_;
     uint8 internal _totalBids_;
 
     Seller private seller;
     Asset public asset;
-    uint256 internal finalAmount;
     Bid private _highestBidder_;
     AuctionStatus private status;
 
@@ -146,7 +146,7 @@ contract Auction is IERC721Receiver{
         bidder[msg.sender] = Bidder({
             buyer_ : msg.sender,
             deposit_ : DepositStatus.hasDeposited,
-            withdraw_ : WithdrawStatus.hasWithdrawn,
+            withdraw_ : WithdrawStatus.noWithdraw,
             safe_ : Escrow.hasVault,
             registered_ : IsRegistered.registered
         });
@@ -201,7 +201,8 @@ contract Auction is IERC721Receiver{
     function withdraw(bytes10 _accessKey) afterAuction onlyBidders(msg.sender) public {
         require(_accessKey == safe[msg.sender].accessKey_, "AUCTION ERROR : Invalid access key");
         require(bidder[msg.sender].withdraw_ == WithdrawStatus.noWithdraw,"AUCTION ERROR : already withdrew");
-        
+        require(msg.sender != _highestBidder_.buyer_,"AUCTION ERROR : Can't withdraw you are the current highest bidder");
+
         uint256 amount = safe[msg.sender].amount_;
         delete safe[msg.sender];
         bidder[msg.sender].withdraw_ = WithdrawStatus.hasWithdrawn;
@@ -230,15 +231,15 @@ contract Auction is IERC721Receiver{
         }
     }
 
-    function assetInAuction() public returns(Asset memory) {
+    function assetInAuction() view public returns(Asset memory) {
         return asset;
     }
 
-    function totalBids() public returns(uint8) {
+    function totalBids() view public returns(uint8) {
         return _totalBids_;
     }
 
-    function totalBidders() public returns(uint8) {
+    function totalBidders() view public returns(uint8) {
         return _totalBidders_;
     }
 

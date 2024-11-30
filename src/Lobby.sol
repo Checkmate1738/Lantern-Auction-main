@@ -115,16 +115,6 @@ contract Lobby is IERC721Receiver {
         auction.placeBid(amount);
     }
 
-    function Deposit(bytes3 _auctionSig_, uint256 amount, bytes10 accessKey) public {
-        Auction auction = auctions[_auctionSig_];
-        auction.deposit(amount, accessKey);
-    }
-
-    function Withdraw(bytes3 _auctionSig_,bytes10 accessKey) public {
-        Auction auction = auctions[_auctionSig_];
-        auction.withdraw(accessKey);
-    }
-
     function SendAsset(bytes3 _auctionSig_) onlySellers public{
         Auction auction = auctions[_auctionSig_];
         auction.sendNFT();
